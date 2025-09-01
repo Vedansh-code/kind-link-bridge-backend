@@ -1,5 +1,5 @@
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const http = require("http");
@@ -9,10 +9,7 @@ const os = require("os");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 const PORT = process.env.PORT || 5000;
@@ -22,153 +19,132 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // SQLite database setup
-const db = new sqlite3.Database("./users.db", (err) => {
-  if (err) {
-    console.error("❌ Error opening database:", err);
-  } else {
-    console.log("✅ Connected to SQLite database.");
-    db.serialize(() => {
-      db.run(
-        `CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          username TEXT NOT NULL,
-          email TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL
-        )`
-      );
+const db = new Database("./users.db", { verbose: console.log });
 
-      db.run(
-        `CREATE TABLE IF NOT EXISTS donations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          amount REAL,
-          date TEXT,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )`
-      );
+// Create tables if they don’t exist
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
+  )
+`).run();
 
-      db.run(
-        `CREATE TABLE IF NOT EXISTS volunteer_hours (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          hours INTEGER,
-          date TEXT,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )`
-      );
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS donations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    amount REAL,
+    date TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`).run();
 
-      db.run(
-        `CREATE TABLE IF NOT EXISTS user_causes (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          cause_name TEXT,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )`
-      );
-    });
-  }
-});
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS volunteer_hours (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    hours INTEGER,
+    date TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`).run();
+
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS user_causes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    cause_name TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`).run();
 
 // Signup API
 app.post("/signup", (req, res) => {
   const { username, email, password } = req.body;
-
-  db.run(
-    `INSERT INTO users (username, email, password) VALUES (?, ?, ?)`,
-    [username, email, password],
-    function (err) {
-      if (err) {
-        return res.status(400).json({ error: "⚠️ Email already exists" });
-      }
-      res.json({ id: this.lastID, username, email });
-    }
-  );
+  try {
+    const stmt = db.prepare(`INSERT INTO users (username, email, password) VALUES (?, ?, ?)`);
+    const info = stmt.run(username, email, password);
+    res.json({ id: info.lastInsertRowid, username, email });
+  } catch (err) {
+    res.status(400).json({ error: "⚠️ Email already exists" });
+  }
 });
 
 // Login API
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
-
-  db.get(
-    `SELECT * FROM users WHERE email = ? AND password = ?`,
-    [email, password],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: "⚠️ Internal server error" });
-      if (!row) return res.status(400).json({ error: "❌ Invalid credentials" });
-      res.json({ id: row.id, username: row.username, email: row.email });
-    }
-  );
+  try {
+    const user = db.prepare(`SELECT * FROM users WHERE email = ? AND password = ?`).get(email, password);
+    if (!user) return res.status(400).json({ error: "❌ Invalid credentials" });
+    res.json({ id: user.id, username: user.username, email: user.email });
+  } catch (err) {
+    res.status(500).json({ error: "⚠️ Internal server error" });
+  }
 });
 
-// Donation API with real-time update
+// Donation API
 app.post("/donations", (req, res) => {
   const { user_id, amount } = req.body;
   const date = new Date().toISOString();
+  try {
+    const stmt = db.prepare(`INSERT INTO donations (user_id, amount, date) VALUES (?, ?, ?)`);
+    const info = stmt.run(user_id, amount, date);
 
-  db.run(
-    `INSERT INTO donations (user_id, amount, date) VALUES (?, ?, ?)`,
-    [user_id, amount, date],
-    function (err) {
-      if (err) return res.status(500).json({ error: "Failed to add donation" });
+    io.emit(`donation-update-${user_id}`, { amount });
 
-      io.emit(`donation-update-${user_id}`, { amount });
-
-      res.json({ id: this.lastID, user_id, amount, date });
-    }
-  );
+    res.json({ id: info.lastInsertRowid, user_id, amount, date });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to add donation" });
+  }
 });
 
-// Volunteer Hours
+// Volunteer Hours API
 app.post("/volunteer", (req, res) => {
   const { user_id, hours } = req.body;
   const date = new Date().toISOString();
-
-  db.run(
-    `INSERT INTO volunteer_hours (user_id, hours, date) VALUES (?, ?, ?)`,
-    [user_id, hours, date],
-    function (err) {
-      if (err) return res.status(500).json({ error: "Failed to log hours" });
-      res.json({ id: this.lastID, user_id, hours, date });
-    }
-  );
+  try {
+    const stmt = db.prepare(`INSERT INTO volunteer_hours (user_id, hours, date) VALUES (?, ?, ?)`);
+    const info = stmt.run(user_id, hours, date);
+    res.json({ id: info.lastInsertRowid, user_id, hours, date });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to log hours" });
+  }
 });
 
-// Cause Support
+// Cause Support API
 app.post("/causes", (req, res) => {
   const { user_id, cause_name } = req.body;
-
-  db.run(
-    `INSERT INTO user_causes (user_id, cause_name) VALUES (?, ?)`,
-    [user_id, cause_name],
-    function (err) {
-      if (err) return res.status(500).json({ error: "Failed to support cause" });
-      res.json({ id: this.lastID, user_id, cause_name });
-    }
-  );
+  try {
+    const stmt = db.prepare(`INSERT INTO user_causes (user_id, cause_name) VALUES (?, ?)`);
+    const info = stmt.run(user_id, cause_name);
+    res.json({ id: info.lastInsertRowid, user_id, cause_name });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to support cause" });
+  }
 });
 
 // Dashboard API
 app.get("/dashboard/:user_id", (req, res) => {
   const { user_id } = req.params;
+  try {
+    const user = db.prepare(`SELECT username, email FROM users WHERE id = ?`).get(user_id);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-  db.serialize(() => {
-    db.get(`SELECT username, email FROM users WHERE id = ?`, [user_id], (err, user) => {
-      if (err || !user) return res.status(404).json({ error: "User not found" });
+    const donation = db.prepare(`SELECT SUM(amount) as total_donations FROM donations WHERE user_id = ?`).get(user_id);
+    const hours = db.prepare(`SELECT SUM(hours) as total_hours FROM volunteer_hours WHERE user_id = ?`).get(user_id);
+    const causes = db.prepare(`SELECT cause_name FROM user_causes WHERE user_id = ?`).all(user_id);
 
-      db.get(`SELECT SUM(amount) as total_donations FROM donations WHERE user_id = ?`, [user_id], (err, donation) => {
-        db.get(`SELECT SUM(hours) as total_hours FROM volunteer_hours WHERE user_id = ?`, [user_id], (err, hours) => {
-          db.all(`SELECT cause_name FROM user_causes WHERE user_id = ?`, [user_id], (err, causes) => {
-            res.json({
-              user,
-              total_donations: donation?.total_donations || 0,
-              total_hours: hours?.total_hours || 0,
-              causes: causes.map((c) => c.cause_name),
-            });
-          });
-        });
-      });
+    res.json({
+      user,
+      total_donations: donation?.total_donations || 0,
+      total_hours: hours?.total_hours || 0,
+      causes: causes.map(c => c.cause_name),
     });
-  });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch dashboard" });
+  }
 });
 
 // Socket.io connection
@@ -177,14 +153,12 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("🔴 Client disconnected:", socket.id));
 });
 
-// Function to get local IP address
+// Get local IP
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
     }
   }
   return "localhost";
