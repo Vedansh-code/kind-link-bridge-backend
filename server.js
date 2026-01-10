@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const Database = require("better-sqlite3");
 const bodyParser = require("body-parser");
@@ -5,18 +6,50 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const os = require("os");
+const session = require("express-session");
+const passport = require("passport");
+require("./passport");   // this loads passport config
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: {
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+
 });
 
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  credentials: true
+}));
+
 app.use(bodyParser.json());
+
+// SESSION (ADD HERE)
+app.set("trust proxy", 1);
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    },
+  })
+);
+
+
+// PASSPORT (ADD HERE)
+app.use(passport.initialize());
+app.use(passport.session());
 
 // SQLite database setup
 const db = new Database("./users.db", { verbose: console.log });
@@ -83,6 +116,35 @@ app.post("/login", (req, res) => {
     res.status(500).json({ error: "⚠️ Internal server error" });
   }
 });
+
+// GOOGLE AUTH ROUTES
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+  })
+);
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: process.env.FRONTEND_URL,
+  }),
+  (req, res) => {
+    res.redirect(`${process.env.FRONTEND_URL}/#/dashboard`);
+  }
+);
+
+app.get("/auth/user", (req, res) => {
+  res.json(req.user || null);
+});
+
+app.get("/auth/logout", (req, res) => {
+  req.logout(() => { });
+  res.send("Logged out");
+});
+
 
 // Donation API
 app.post("/donations", (req, res) => {
