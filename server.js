@@ -15,14 +15,6 @@ const authRoutes = require("./routes/authRoutes");
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
 
 // Middleware
 app.use(cors({
@@ -39,14 +31,40 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: true,
+      sameSite: "none",
+      httpOnly: true,
     },
   })
 );
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Uptime Bot
+
+app.get("/ping", (req, res) => {
+  res.status(200).send("OK");
+});
+
+app.get("/", (req, res) => {
+  res.send("Server running");
+});
+
+// Socket.io
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running at http://${LOCAL_IP}:${PORT}`);
+});
 
 // MongoDB
 connectDB();
@@ -94,8 +112,4 @@ function getLocalIP() {
 
 const LOCAL_IP = getLocalIP();
 
-// Start server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running at http://${LOCAL_IP}:${PORT}`);
-});
+
