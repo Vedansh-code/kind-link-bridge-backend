@@ -30,6 +30,7 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    proxy: true,
     cookie: {
       secure: true,
       sameSite: "none",
@@ -73,8 +74,12 @@ connectDB();
 app.use("/api/auth", authRoutes);
 
 // Google OAuth
-app.get("/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+app.get(
+  "/auth/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    prompt: "select_account"
+  })
 );
 
 app.get("/auth/google/callback",
@@ -88,6 +93,15 @@ app.get("/auth/google/callback",
 
 app.get("/auth/user", (req, res) => {
   res.json(req.user || null);
+});
+
+app.get("/auth/logout", (req, res) => {
+  req.logout(() => {
+    req.session.destroy(() => {
+      res.clearCookie("connect.sid");
+      res.redirect(process.env.FRONTEND_URL);
+    });
+  });
 });
 
 
