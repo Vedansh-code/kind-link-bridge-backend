@@ -1,5 +1,19 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
+const jwt = require("jsonwebtoken");
+
+const generateTokenAndSetCookie = (res, userId) => {
+    const token = jwt.sign({ userId }, process.env.JWT_SECRET || process.env.SESSION_SECRET, {
+        expiresIn: "7d"
+    });
+
+    res.cookie("jwt", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+};
 
 // SIGNUP
 exports.signup = async (req, res) => {
@@ -18,6 +32,8 @@ exports.signup = async (req, res) => {
             email,
             password: hashedPassword,
         });
+
+        generateTokenAndSetCookie(res, user._id);
 
         res.json({
             id: user._id,
@@ -44,6 +60,8 @@ exports.login = async (req, res) => {
             return res.status(400).json({ error: "Invalid credentials" });
         }
 
+        generateTokenAndSetCookie(res, user._id);
+
         res.json({
             id: user._id,
             username: user.username,
@@ -54,25 +72,14 @@ exports.login = async (req, res) => {
     }
 };
 
-
 // LOGOUT
 exports.logout = (req, res) => {
-    req.logout(err => {
-        if (err) {
-            return res.status(500).json({ error: "Logout failed" });
-        }
-
-        // Destroy session
-        req.session.destroy(() => {
-            // Clear session cookie
-            res.clearCookie("connect.sid", {
-                path: "/",
-                httpOnly: true,
-                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-                secure: process.env.NODE_ENV === "production",
-            });
-
-            res.json({ message: "Logged out successfully" });
-        });
+    res.clearCookie("jwt", {
+        path: "/",
+        httpOnly: true,
+        sameSite: "none",
+        secure: true,
     });
+
+    res.json({ message: "Logged out successfully" });
 };

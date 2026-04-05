@@ -1,6 +1,7 @@
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const User = require("../models/User");
+const bcrypt = require("bcrypt");
 
 passport.use(
     new GoogleStrategy(
@@ -17,10 +18,13 @@ passport.use(
                 let user = await User.findOne({ email });
 
                 if (!user) {
+                    const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+                    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
                     user = await User.create({
                         username: profile.displayName,
                         email,
-                        password: "google-auth",
+                        password: hashedPassword,
                     });
                 }
 
@@ -31,16 +35,3 @@ passport.use(
         }
     )
 );
-
-// session handling
-passport.serializeUser((user, done) => {
-    done(null, user._id);
-});
-
-passport.deserializeUser(async (id, done) => {
-    try {
-        done(null, await User.findById(id));
-    } catch (err) {
-        done(err, null);
-    }
-});

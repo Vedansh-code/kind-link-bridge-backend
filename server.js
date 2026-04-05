@@ -4,13 +4,15 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const os = require("os");
-const session = require("express-session");
+const cookieParser = require("cookie-parser");
 const passport = require("passport");
+const jwt = require("jsonwebtoken");
 
 const connectDB = require("./config/db");
 require("./config/passport");
 
 const authRoutes = require("./routes/authRoutes");
+const authMiddleware = require("./middlewares/authMiddleware");
 
 const app = express();
 const server = http.createServer(app);
@@ -22,26 +24,11 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(cookieParser());
 
 app.set("trust proxy", 1);
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: {
-      secure: true,
-      sameSite: "none",
-      httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-    },
-  })
-);
-
 app.use(passport.initialize());
-app.use(passport.session());
 
 // Uptime Bot
 
@@ -79,7 +66,8 @@ app.get(
   "/auth/google",
   passport.authenticate("google", {
     scope: ["profile", "email"],
-    prompt: "select_account"
+    prompt: "select_account",
+    session: false
   })
 );
 
@@ -87,36 +75,36 @@ app.get(
   "/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: process.env.FRONTEND_URL,
+    session: false
   }),
   (req, res) => {
-    req.session.regenerate(function (err) {
-      if (err) return res.redirect(process.env.FRONTEND_URL);
-
-      req.session.passport = { user: req.user._id };
-
-      res.redirect(`${process.env.FRONTEND_URL}/#/dashboard`);
+    const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET || process.env.SESSION_SECRET, {
+        expiresIn: "7d"
     });
+
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    res.redirect(`${process.env.FRONTEND_URL}/#/dashboard`);
   }
 );
 
-app.get("/auth/user", (req, res) => {
-  res.json(req.user || null);
+app.get("/auth/user", authMiddleware, (req, res) => {
+  res.json(req.user);
 });
 
 app.get("/auth/logout", (req, res) => {
-  req.logout(function (err) {
-    if (err) return res.send(err);
-
-    req.session.destroy(function () {
-      res.clearCookie("connect.sid", {
-        path: "/",
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-      });
-      res.redirect(process.env.FRONTEND_URL);
-    });
+  res.clearCookie("jwt", {
+    path: "/",
+    httpOnly: true,
+    sameSite: "none",
+    secure: true,
   });
+  res.redirect(process.env.FRONTEND_URL);
 });
 
 
@@ -140,5 +128,3 @@ function getLocalIP() {
 }
 
 const LOCAL_IP = getLocalIP();
-
-
