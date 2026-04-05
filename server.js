@@ -82,12 +82,19 @@ app.get(
   })
 );
 
-app.get("/auth/google/callback",
+app.get(
+  "/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: process.env.FRONTEND_URL,
   }),
   (req, res) => {
-    res.redirect(`${process.env.FRONTEND_URL}/#/dashboard`);
+    req.session.regenerate(function (err) {
+      if (err) return res.redirect(process.env.FRONTEND_URL);
+
+      req.session.passport = { user: req.user._id };
+
+      res.redirect(`${process.env.FRONTEND_URL}/#/dashboard`);
+    });
   }
 );
 
@@ -96,9 +103,16 @@ app.get("/auth/user", (req, res) => {
 });
 
 app.get("/auth/logout", (req, res) => {
-  req.logout(() => {
-    req.session.destroy(() => {
-      res.clearCookie("connect.sid");
+  req.logout(function (err) {
+    if (err) return res.send(err);
+
+    req.session.destroy(function () {
+      res.clearCookie("connect.sid", {
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+      });
       res.redirect(process.env.FRONTEND_URL);
     });
   });
