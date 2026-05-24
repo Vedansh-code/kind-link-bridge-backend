@@ -12,6 +12,7 @@ const connectDB = require("./config/db");
 require("./config/passport");
 
 const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
 const authMiddleware = require("./middlewares/authMiddleware");
 
 const app = express();
@@ -60,6 +61,7 @@ connectDB();
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 
 // Google OAuth
 app.get(

@@ -15,6 +15,20 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        fieldsOfInterest: [
+            {
+                type: String,
+                trim: true
+            }
+        ],
+        donationType: {
+            type: String,
+            trim: true
+        },
+        location: {
+            type: String,
+            trim: true
+        }
     },
     { timestamps: true }
 );
