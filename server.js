@@ -5,6 +5,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const os = require("os");
 const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
 
@@ -13,18 +15,32 @@ require("./config/passport");
 
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const ngoRoutes = require("./routes/ngoRoutes");
 const authMiddleware = require("./middlewares/authMiddleware");
 
 const app = express();
 const server = http.createServer(app);
 
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:8080",
+  "http://192.168.137.1:8080",
+  "http://192.168.137.1:5173"
+];
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: allowedOrigins,
   credentials: true,
 }));
+// Middleware
+app.use(helmet());
 app.use(express.json());
+app.use(mongoSanitize());
 app.use(cookieParser());
 
 app.set("trust proxy", 1);
@@ -44,7 +60,7 @@ app.get("/", (req, res) => {
 // Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -62,6 +78,7 @@ connectDB();
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/ngos", ngoRoutes);
 
 // Google OAuth
 app.get(

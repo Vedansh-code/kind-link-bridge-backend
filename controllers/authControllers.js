@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
+const Ngo = require("../models/Ngo");
 const jwt = require("jsonwebtoken");
 
 const generateTokenAndSetCookie = (res, userId) => {
@@ -69,6 +70,77 @@ exports.login = async (req, res) => {
         });
     } catch {
         res.status(500).json({ error: "Login failed" });
+    }
+};
+
+// NGO SIGNUP
+exports.ngoSignup = async (req, res) => {
+    try {
+        const { email, password, name, tagline, isVerified, verificationDocument, city, description, childrenInCare, category, operatingLocations, foundedDate, impactMetrics } = req.body;
+
+        const exists = await Ngo.findOne({ email });
+        if (exists) {
+            return res.status(400).json({ error: "NGO with this email already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const ngo = await Ngo.create({
+            email,
+            password: hashedPassword,
+            name,
+            tagline,
+            isVerified,
+            verificationDocument,
+            city,
+            description,
+            childrenInCare,
+            category,
+            operatingLocations,
+            foundedDate,
+            impactMetrics
+        });
+
+        generateTokenAndSetCookie(res, ngo._id);
+
+        res.json({
+            id: ngo._id,
+            name: ngo.name,
+            email: ngo.email,
+            role: "ngo"
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "NGO Signup failed" });
+    }
+};
+
+// NGO LOGIN
+exports.ngoLogin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        const ngo = await Ngo.findOne({ email });
+        if (!ngo) {
+            return res.status(400).json({ error: "Invalid credentials" });
+        }
+
+        const match = await bcrypt.compare(password, ngo.password);
+        if (!match) {
+            return res.status(400).json({ error: "Invalid credentials" });
+        }
+
+        generateTokenAndSetCookie(res, ngo._id);
+
+        res.json({
+            id: ngo._id,
+            name: ngo.name,
+            email: ngo.email,
+            role: "ngo"
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "NGO Login failed" });
     }
 };
 
