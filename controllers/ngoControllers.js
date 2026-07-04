@@ -1,5 +1,6 @@
 const Ngo = require("../models/Ngo");
 const User = require("../models/User");
+const axios = require('axios');
 
 // Get all NGOs
 exports.getAllNgos = async (req, res) => {
@@ -58,10 +59,39 @@ exports.searchNgos = async (req, res) => {
     }
 };
 
-// Get Rules-Based Recommendations for a User
+// Get ML + Rules-Based Recommendations for a User (Orchestrator)
 exports.getRecommendationsForUser = async (req, res) => {
     try {
         const userId = req.params.userId;
+        
+        // step 1: ask for python ai for rec
+        try {
+            // Send request to ML microservice
+            const mlResponse = await axios.get(`http://127.0.0.1:8000/recommend/${userId}`);
+            
+            // If the model is trained and returns success
+            if (mlResponse.data && mlResponse.data.status === "ai_success") {
+                const recommendedNgoIds = mlResponse.data.recommendations;
+                
+                // fetch the full NGO profiles from MongoDB using the returned IDs
+                const ngos = await Ngo.find({ _id: { $in: recommendedNgoIds } }).select('-password');
+                
+                // Attach a note so Vedansh (Frontend) can display why it was recommended
+                const ngosWithReason = ngos.map(ngo => ({
+                    ...ngo._doc,
+                    matchReasons: ["Users with similar interests also engaged with this NGO"]
+                }));
+                
+                console.log("Successfully served AI Recommendations!");
+                return res.json(ngosWithReason);
+            }
+        } catch (mlError) {
+            console.log("Python ML Engine is offline or skipped. Switching to Fallback...");
+        }
+
+        // STEP 2: the rule based fallback 
+        // This runs if Python returns "fallback" or if the Python server is offline!
+        console.log("Running Rules-Based Fallback for User:", userId);
         
         // 1. Fetch the user
         const user = await User.findById(userId);
@@ -117,7 +147,7 @@ exports.getRecommendationsForUser = async (req, res) => {
         relevantNgos.sort((a, b) => b.matchScore - a.matchScore);
 
         // 6. Return top 10 recommendations
-        res.json(relevantNgos.slice(0, 10));
+        return res.json(relevantNgos.slice(0, 10));
 
     } catch (error) {
         console.error("Error generating recommendations:", error);
