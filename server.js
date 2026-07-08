@@ -1,3 +1,5 @@
+const dns = require('node:dns');
+dns.setDefaultResultOrder('ipv4first');
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -147,3 +149,7 @@ function getLocalIP() {
 }
 
 const LOCAL_IP = getLocalIP();
+
+
+const retentionRoutes = require('./routes/retentionRoutes');
+app.use('/api/retention', retentionRoutes);
