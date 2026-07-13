@@ -33,3 +33,15 @@ exports.updateProfile = async (req, res) => {
         res.status(500).json({ error: "Failed to update profile" });
     }
 };
+
+const { Favorite } = require("../models/ChatbotAction");
+
+exports.getUserFavorites = async (req, res) => {
+    try {
+        const favorites = await Favorite.find({ userId: req.params.userId }).sort({ date: -1 });
+        res.json(favorites);
+    } catch (error) {
+        console.error("❌ Fetch favorites error:", error.message);
+        res.status(500).json({ error: "Failed to fetch favorites" });
+    }
+};

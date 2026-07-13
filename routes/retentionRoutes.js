@@ -24,10 +24,7 @@ router.post('/trigger-emails', async (req, res) => {
         }
 
         // 1. Look up all users from the database whose IDs match the array from Python
-        // const users = await User.find({ _id: { $in: at_risk_users } });
-         const users = [
-            { email: "kanishkarajput4918@gmail.com", username: "Kanishka" } // Put YOUR real email here!
-        ];
+        const users = await User.find({ _id: { $in: at_risk_users } });
         
         // 2. Loop through each user and send an email
         for (let user of users) {

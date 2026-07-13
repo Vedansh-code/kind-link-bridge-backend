@@ -154,3 +154,38 @@ exports.getRecommendationsForUser = async (req, res) => {
         res.status(500).json({ error: "Failed to generate recommendations" });
     }
 };
+
+const { Visit, Pledge, Callback } = require("../models/ChatbotAction");
+
+// Get all visits
+exports.getVisits = async (req, res) => {
+    try {
+        const visits = await Visit.find({ ngoId: req.params.ngoId }).sort({ date: -1 });
+        res.json(visits);
+    } catch (error) {
+        console.error("Error fetching visits:", error);
+        res.status(500).json({ error: "Failed to fetch visits" });
+    }
+};
+
+// Get all donations
+exports.getDonations = async (req, res) => {
+    try {
+        const pledges = await Pledge.find({ ngoId: req.params.ngoId }).sort({ date: -1 });
+        res.json(pledges);
+    } catch (error) {
+        console.error("Error fetching donations:", error);
+        res.status(500).json({ error: "Failed to fetch donations" });
+    }
+};
+
+// Get all callbacks
+exports.getCallbacks = async (req, res) => {
+    try {
+        const callbacks = await Callback.find({ ngoId: req.params.ngoId }).sort({ date: -1 });
+        res.json(callbacks);
+    } catch (error) {
+        console.error("Error fetching callbacks:", error);
+        res.status(500).json({ error: "Failed to fetch callbacks" });
+    }
+};
