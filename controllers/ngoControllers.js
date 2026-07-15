@@ -67,7 +67,8 @@ exports.getRecommendationsForUser = async (req, res) => {
         // step 1: ask for python ai for rec
         try {
             // Send request to ML microservice
-            const mlResponse = await axios.get(`http://127.0.0.1:8000/recommend/${userId}`);
+            const mlUrl = process.env.ML_URL || 'http://127.0.0.1:8000';
+            const mlResponse = await axios.get(`${mlUrl}/recommend/${userId}`);
             
             // If the model is trained and returns success
             if (mlResponse.data && mlResponse.data.status === "ai_success") {
@@ -189,3 +190,4 @@ exports.getCallbacks = async (req, res) => {
         res.status(500).json({ error: "Failed to fetch callbacks" });
     }
 };
+

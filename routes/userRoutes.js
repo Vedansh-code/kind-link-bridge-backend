@@ -8,6 +8,6 @@ const router = express.Router();
 router.put("/profile", authMiddleware, updateProfile);
 
 // GET /api/users/:userId/favorites - Fetch user's favorite NGOs
-router.get("/:userId/favorites", authMiddleware, getUserFavorites);
+router.get("/:userId/favorites", getUserFavorites);
 
 module.exports = router;
